@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>kimi</title>
+<style>
+  html,body{margin:0;height:100%;background:#060208;overflow:hidden}
+  body{display:flex;justify-content:center;align-items:center;font-family: ui-monospace, SFMono-Regular, Menlo, monospace;}
+  #wrap{position:relative;margin:0 auto}
+  canvas{display:block}
+  #hc{position:absolute;left:0;top:0;pointer-events:none}
+  main { width: min(100%, 1100px); text-align: center; }
+  .eyebrow { color: #9ca3af; letter-spacing: .24em; font-size: 10px; text-transform: uppercase; }
+  h1 { margin: 10px 0 8px; font-size: clamp(20px, 5vw, 34px); letter-spacing: .08em; color: #9ca3af; }
+  .subtitle { color: #8b91a1; font-size: 12px; margin: 0 0 22px; }
+  footer { margin-top: 16px; color: #747b8b; font-size: 10px; line-height: 1.7; }
+  a { color: #b9dcef; text-decoration: none; }
+  .live { display: inline-flex; align-items: center; gap: 7px; margin-top: 14px; color: #9ca3af; font-size: 10px; }
+  .dot { width: 6px; height: 6px; border-radius: 50%; background: #68d391; box-shadow: 0 0 10px #68d391; }
+  #start{position:fixed;inset:0;display:flex;flex-direction:column;justify-content:center;
+    align-items:center;background:#060208;color:#ffb3c0;font:20px sans-serif;z-index:10;cursor:pointer}
+  #start small{margin-top:10px;opacity:.6;font-size:14px}
+</style>
+</head>
+<body>
+    <audio id="bgm" src="/lagu" loop preload="auto"></audio>
+    <div id="start">Ketuk untuk mulai<small>Nyalakan Musik</small></div>
+    <main>
+        <div class="eyebrow">FOR U</div>
+        <h1>Khumaira Indriani</h1>
+        <p class="subtitle"></p>
+        <div id="wrap"><canvas id="c"></canvas><canvas id="hc"></canvas></div>
+        <div class="live"><span class="dot"></span> POWERED WITH · PYTHON</div>
+        <footer>
+          Create by <a href="https://instagram.com/krysnaaw._" target="_blank" style="color: #b9dcef;">@krysnaaw._</a><br>
+          Refresh this page to restart the animation.
+        </footer>
+    </main>
+<script>
+const bgm = document.getElementById("bgm");
+const startEl = document.getElementById("start");
+let audioOn = false, lastT = null;
+
+startEl.addEventListener("click", () => {
+  bgm.play().then(() => {
+    audioOn = true;
+    startEl.remove();
+    if (lastT !== null) syncAudio(lastT);
+  }).catch(() => { startEl.remove(); });   // kalau gagal, animasi tetap jalan tanpa suara
+});
+
+function syncAudio(t) {
+  lastT = t;
+  if (!audioOn || !isFinite(bgm.duration)) return;
+  const target = t % bgm.duration;          // lagu pendek akan mengulang
+  if (Math.abs(bgm.currentTime - target) > 0.6) bgm.currentTime = target;
+}
+
+
+const wrap = document.getElementById("wrap");
+const cv = document.getElementById("c"), g = cv.getContext("2d");
+const hc = document.getElementById("hc"), hg = hc.getContext("2d");
+const stat = document.createElement("canvas"), sg = stat.getContext("2d");
+let M = null, codes, colors, cw, chh, BGC = [0, 0, 0];
+
+function layout() {
+  if (!M) return;
+  cw = Math.floor(Math.min(innerWidth / M.cols, (innerHeight / M.rows) * (M.cw / M.ch)) * 100) / 100;
+  chh = cw * M.ch / M.cw;
+  const dpr = devicePixelRatio || 1;
+  const W = cw * M.cols, H = chh * M.rows;
+  wrap.style.width = W + "px"; wrap.style.height = H + "px";
+  for (const c of [cv, hc]) {
+    c.style.width = W + "px"; c.style.height = H + "px";
+    c.width = Math.round(W * dpr); c.height = Math.round(H * dpr);
+  }
+  stat.width = hc.width; stat.height = hc.height;
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  hg.setTransform(dpr, 0, 0, dpr, 0, 0);
+  sg.setTransform(dpr, 0, 0, dpr, 0, 0);
+  g.font = "bold " + Math.floor(chh * 0.9) + "px 'DejaVu Sans Mono', Menlo, Consolas, monospace";
+  g.textAlign = "center"; g.textBaseline = "middle";
+  for (const c of [hg, sg]) { c.textAlign = "center"; c.textBaseline = "middle"; }
+  redraw();
+  heartInit(W, H);
+}
+
+function cell(i) {
+  const x = (i % M.cols) * cw, y = Math.floor(i / M.cols) * chh;
+  g.fillStyle = M.bg;
+  g.fillRect(x, y, cw + 0.5, chh + 0.5);
+  const c = codes[i];
+  if (c !== 32 && c !== 0) {
+    g.fillStyle = "rgb(" + colors[i*3] + "," + colors[i*3+1] + "," + colors[i*3+2] + ")";
+    g.fillText(String.fromCharCode(c), x + cw / 2, y + chh / 2);
+  }
+}
+function redraw() {
+  g.save(); g.setTransform(1, 0, 0, 1, 0, 0);
+  g.fillStyle = M.bg; g.fillRect(0, 0, cv.width, cv.height);
+  g.restore();
+  for (let i = 0; i < M.cols * M.rows; i++) cell(i);
+}
+
+/* ======================= LOVE HEART (port dari love.py) ======================= */
+const PHRASES = [
+  "I love you", "Seni seviyorum", "Te amo", "Je t'aime",
+  "Ich liebe dich", "Ti amo", "Eu te amo", "Я тебя люблю",
+  "사랑해", "愛してる", "我爱你", "मैं तुमसे प्यार करता हूँ",
+  "Σ' αγαπώ", "Ik hou van jou", "Jag älskar dig", "Kocham cię",
+  "ฉันรักเธอ", "Anh yêu em", "Aku cinta kamu", "Я тебе кохаю",
+];
+const SIZES = [9, 10, 11, 12], GAP = 7, LIFT = 34, ANIM_S = 0.672;
+const FLASH = [1.0, 0.78, 0.78];
+const FAM = "Arial,'Liberation Sans','Noto Sans','DejaVu Sans',Helvetica,sans-serif";
+
+const clamp = v => Math.max(0, Math.min(1, v));
+const mix = (a, b, k) => a.map((p, i) => p + (b[i] - p) * k);
+const dim = (c, k) => c.map(v => v * k);
+const rgb = c => "rgb(" + c.map(v => Math.round(clamp(v) * 255)).join(",") + ")";
+const fontOf = s => "bold " + s + "px " + FAM;
+
+function mulberry32(a) {
+  return function () {
+    a |= 0; a = a + 0x6D2B79F5 | 0;
+    let t = Math.imul(a ^ a >>> 15, 1 | a);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+
+function heartPt(a, sc) {
+  const x = 16 * Math.pow(Math.sin(a), 3);
+  const y = 13 * Math.cos(a) - 5 * Math.cos(2*a) - 2 * Math.cos(3*a) - Math.cos(4*a);
+  return [x * sc, y * sc];
+}
+
+function buildHeart(ctx, W, H, duration) {
+  const rnd = mulberry32(11);
+  const uni = (a, b) => a + (b - a) * rnd();
+
+  const ys0 = [];
+  for (let i = 0; i < 720; i++) ys0.push(heartPt(2 * Math.PI * i / 720, 1)[1]);
+  const sc = Math.min(W * 0.92 / 32, H * 0.90 / (Math.max(...ys0) - Math.min(...ys0)));
+  const fscale = sc / 21;
+  const poly = [];
+  for (let i = 0; i < 720; i++) poly.push(heartPt(2 * Math.PI * i / 720, sc));
+  const edges = poly.map((p, i) => [p, poly[(i + 1) % 720]]);
+  const ymax = Math.max(...poly.map(p => p[1])), ymin = Math.min(...poly.map(p => p[1]));
+  const cy = (ymax + ymin) / 2;
+
+  const px = s => Math.max(6, Math.round(s * fscale * 1.333 * 2) / 2);
+  const sizes = [...new Set(SIZES.map(px))].sort((a, b) => a - b);
+
+  const spans = y => {
+    const xs = [];
+    for (const [[x1, y1], [x2, y2]] of edges)
+      if ((y1 <= y && y < y2) || (y2 <= y && y < y1)) xs.push(x1 + (y - y1) * (x2 - x1) / (y2 - y1));
+    xs.sort((a, b) => a - b);
+    const out = [];
+    for (let i = 0; i + 1 < xs.length; i += 2) out.push([xs[i], xs[i + 1]]);
+    return out;
+  };
+  const intersect = (A, B, minw) => {
+    const out = [];
+    for (const a of A) for (const b of B) {
+      const lo = Math.max(a[0], b[0]), hi = Math.min(a[1], b[1]);
+      if (hi - lo > minw) out.push([lo, hi]);
+    }
+    return out;
+  };
+  const dist = (x, y) => Math.hypot(x / (16 * sc), (y - cy) / (14.5 * sc));
+
+  let queue = [];
+  const next = () => {
+    if (!queue.length) {
+      queue = PHRASES.slice();
+      for (let i = queue.length - 1; i > 0; i--) {
+        const j = Math.floor(rnd() * (i + 1));
+        [queue[i], queue[j]] = [queue[j], queue[i]];
+      }
+    }
+    return queue.pop();
+  };
+  const measure = (text, size) => { ctx.font = fontOf(size); return ctx.measureText(text).width; };
+
+  const rowH = Math.max(...sizes) * 1.25 + 4 * fscale;
+  const half = rowH / 2;
+  const minw = 14 * fscale, gap = GAP * fscale, pad = 4 * fscale;
+  const placed = [];
+
+  for (let y = ymax - half; y > ymin + half; y -= rowH) {
+    const row = intersect(spans(y + half), spans(y - half), minw);
+    for (let [lo, hi] of row) {
+      lo += pad; hi -= pad;
+      let cur = lo + uni(0, 8 * fscale);
+      const line = [];
+      for (;;) {
+        let fit = null;
+        for (let k = 0; k < 10; k++) {
+          const text = next();
+          const size = sizes[Math.floor(rnd() * sizes.length)];
+          const w = measure(text, size);
+          if (cur + w <= hi) { fit = [text, size, w]; break; }
+        }
+        if (!fit) break;
+        line.push([cur + fit[2] / 2, fit[0], fit[1], fit[2]]);
+        cur += fit[2] + gap;
+      }
+      if (!line.length) continue;
+      if (line.length > 1) {
+        const left = hi - (line[line.length - 1][0] + line[line.length - 1][3] / 2);
+        line.forEach((it, i) => { it[0] += left * i / (line.length - 1); });
+      } else line[0][0] = (lo + hi) / 2;
+      line.forEach(([x, text, size], i) =>
+        placed.push({ x, y, text, size, edge: i === 0 || i === line.length - 1 }));
+    }
+  }
+
+  const wine = [0.58, 0.0, 0.09], crimson = [0.90, 0.05, 0.14], blood = [0.98, 0.10, 0.16];
+  for (const p of placed) {
+    const rad = Math.min(1, dist(p.x, p.y));
+    let base = mix(wine, crimson, 0.25 + 0.75 * rad);
+    base = mix(base, blood, uni(0, 0.35) + (p.edge ? 0.3 : 0));
+    p.color = base.map(v => Math.min(1, v));
+    p.rad = rad;
+    p.sx = W / 2 + p.x;
+    p.sy = H / 2 - (p.y - cy);
+    p.dx = uni(-10, 10) * fscale;
+  }
+  const TWO_PI = 2 * Math.PI;
+  const ang = p => ((Math.atan2(p.x, p.y - cy) % TWO_PI) + TWO_PI) % TWO_PI;
+  const edgeItems = placed.filter(p => p.edge).sort((a, b) => ang(a) - ang(b));
+  const inner = placed.filter(p => !p.edge);
+  inner.forEach(p => { p.key = -p.rad + uni(0, 0.08); });
+  inner.sort((a, b) => a.key - b.key);
+  const items = edgeItems.concat(inner);
+  items.forEach((p, i) => { p.t0 = (i + 1) / items.length * duration; });
+  return { items, fscale, W, H };
+}
+
+const Heart = { h: null, landed: 0, lastT: 0, glints: [], lastGlint: 0, on: false, start: 0 };
+
+function heartInit(W, H) {
+  Heart.on = false;
+  hg.clearRect(0, 0, W, H);
+  if (!M || !M.heart) { Heart.h = null; return; }
+  Heart.h = buildHeart(hg, W, H, M.ht);
+  resetHeart();
+}
+function resetHeart() {
+  if (!Heart.h) return;
+  sg.clearRect(0, 0, Heart.h.W, Heart.h.H);
+  Heart.landed = 0; Heart.lastT = 0; Heart.glints = []; Heart.lastGlint = 0;
+}
+function drawPhrase(ctx, p, x, y, cs, ch, cm) {
+  ctx.fillStyle = cs; ctx.font = fontOf(p.size);
+  ctx.fillText(p.text, p.sx + 2, p.sy + 3);
+  ctx.fillStyle = ch; ctx.font = fontOf(p.size + 1);
+  ctx.fillText(p.text, x, y);
+  ctx.fillStyle = cm; ctx.font = fontOf(p.size);
+  ctx.fillText(p.text, x, y);
+}
+function settle(p) {
+  drawPhrase(sg, p, p.sx, p.sy, rgb(dim(p.color, 0.30)), rgb(dim(p.color, 0.20)), rgb(p.color));
+}
+
+function heartFrame(t) {
+  const h = Heart.h; if (!h) return;
+  if (t < Heart.lastT - 0.05) resetHeart();
+  Heart.lastT = t;
+  const items = h.items, N = items.length;
+  while (Heart.landed < N && items[Heart.landed].t0 + ANIM_S <= t) {
+    settle(items[Heart.landed]); Heart.landed++;
+  }
+  const k = clamp((t - (M.ht + M.hh)) / M.hf);
+
+  hg.clearRect(0, 0, h.W, h.H);
+  hg.save();
+  hg.setTransform(1, 0, 0, 1, 0, 0);
+  hg.globalAlpha = 1 - k;
+  hg.drawImage(stat, 0, 0);
+  hg.restore();
+
+  hg.globalAlpha = 1 - k;
+  for (let i = Heart.landed; i < N; i++) {
+    const p = items[i];
+    if (p.t0 > t) break;
+    const u = clamp((t - p.t0) / ANIM_S), e = 1 - Math.pow(1 - u, 3), c = p.color;
+    const x = p.sx + p.dx * (1 - e), y = p.sy - (1 - e) * LIFT * h.fscale;
+    const flash = 0.75 * Math.sin(Math.PI * clamp((u - 0.55) / 0.45));
+    drawPhrase(hg, p, x, y,
+      rgb(mix(BGC, dim(c, 0.30), e)),
+      rgb(mix(BGC, dim(c, 0.20), e * e)),
+      rgb(mix(mix(BGC, c, Math.pow(e, 1.5)), FLASH, flash)));
+  }
+
+  // kilau acak setelah semua kalimat mendarat
+  if (k > 0) Heart.glints = [];
+  else if (Heart.landed >= N && N) {
+    if (t - Heart.lastGlint >= 0.14) {
+      Heart.lastGlint = t;
+      Heart.glints.push({ until: t + 0.26, p: items[Math.floor(Math.random() * N)] });
+    }
+    Heart.glints = Heart.glints.filter(gl => gl.until > t);
+    for (const gl of Heart.glints) {
+      const p = gl.p;
+      hg.fillStyle = rgb(mix(p.color, FLASH, 0.6));
+      hg.font = fontOf(p.size);
+      hg.fillText(p.text, p.sx, p.sy);
+    }
+  }
+  hg.globalAlpha = 1;
+}
+
+function heartLoop() {
+  if (!Heart.on) return;
+  heartFrame(performance.now() / 1000 - Heart.start);
+  requestAnimationFrame(heartLoop);
+}
+function onHeartMsg(th) {
+  if (!Heart.h) return;
+  if (th < 0) {
+    if (Heart.on) { Heart.on = false; hg.clearRect(0, 0, Heart.h.W, Heart.h.H); resetHeart(); }
+    return;
+  }
+  const now = performance.now() / 1000;
+  if (!Heart.on) {
+    Heart.on = true; Heart.start = now - th; resetHeart();
+    requestAnimationFrame(heartLoop);
+  } else if (Math.abs((now - Heart.start) - th) > 0.4) {
+    Heart.start = now - th;                 // sinkron ulang dengan server
+  }
+}
+
+/* ======================= KONEKSI ======================= */
+function connect() {
+  const ws = new WebSocket((location.protocol === "https:" ? "wss://" : "ws://") + location.host + "/ws");
+  ws.binaryType = "arraybuffer";
+  ws.onmessage = (e) => {
+    if (typeof e.data === "string") {
+      const m = JSON.parse(e.data);
+      if (m.cols !== undefined) {
+        M = m;
+        BGC = [1, 3, 5].map(i => parseInt(M.bg.substr(i, 2), 16) / 255);
+        codes = new Uint16Array(M.cols * M.rows).fill(32);
+        colors = new Uint8Array(M.cols * M.rows * 3);
+        layout();
+      } else if (m.h !== undefined) {
+        onHeartMsg(m.h);
+      } else if (m.t !== undefined) {
+        syncAudio(m.t);
+      }
+      return;
+    }
+    const dv = new DataView(e.data);
+    for (let o = 1; o + 7 <= dv.byteLength; o += 7) {
+      const i = dv.getUint16(o, true);
+      codes[i] = dv.getUint16(o + 2, true);
+      colors[i*3] = dv.getUint8(o + 4);
+      colors[i*3+1] = dv.getUint8(o + 5);
+      colors[i*3+2] = dv.getUint8(o + 6);
+      cell(i);
+    }
+  };
+  ws.onclose = () => setTimeout(connect, 1500);   // sambung ulang otomatis
+}
+addEventListener("resize", layout);
+connect();
+</script>
+</body>
+</html>

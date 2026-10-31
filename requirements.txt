@@ -1,0 +1,5 @@
+Flask
+Flask-Sock
+numpy
+Pillow
+gunicorn
